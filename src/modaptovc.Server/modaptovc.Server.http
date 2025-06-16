@@ -1,0 +1,4 @@
+@modaptovc.Server_HostAddress = http://localhost:49557
+
+HEAD {{modaptovc.Server_HostAddress}}/healthy
+###

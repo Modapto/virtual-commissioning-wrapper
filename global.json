@@ -1,0 +1,6 @@
+{
+  "msbuild-sdks": {
+      "Microsoft.Build.NoTargets": "3.5.6",
+      "EKS.Buildsystem": "1.4.0.0-private"
+  }
+}

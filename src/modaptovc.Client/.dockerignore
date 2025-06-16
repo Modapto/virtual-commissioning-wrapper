@@ -1,0 +1,10 @@
+build
+.dockerignore
+Dockerfile
+Dockerfile.prod
+
+.vscode/*
+public/data/*
+dockerbuild.sh
+node_modules
+obj

@@ -1,0 +1,22 @@
+root = true
+
+[*]
+indent_style = space
+indent_size = 4
+end_of_line = lf
+charset = utf-8
+trim_trailing_whitespace = true
+insert_final_newline = true
+max_line_length = 100
+rulers = 100
+
+[*.bat]
+end_of_line = crlf
+
+[*.sln]
+end_of_line = crlf
+indent_style = tab
+
+[*.{xaml,xml,csproj,props,targets,json,html,msbuildproj}]
+indent_size = 2
+max_line_length = 9999
