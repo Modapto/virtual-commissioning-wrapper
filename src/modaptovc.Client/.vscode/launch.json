@@ -7,7 +7,7 @@
       "name": "localhost (Edge)",
       "url": "http://localhost:55083",
       "webRoot": "${workspaceFolder}",
-      "runtimeArgs": [ "--disable-web-security" ]
+      "runtimeArgs": [ "--disable-web-security" ],
     },
     {
       "type": "chrome",
@@ -15,6 +15,7 @@
       "name": "localhost (Chrome)",
       "url": "http://localhost:55083",
       "webRoot": "${workspaceFolder}",
+      "runtimeArgs": [ "--disable-web-security" ],
     }
   ]
 }

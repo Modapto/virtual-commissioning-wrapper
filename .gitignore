@@ -23,8 +23,6 @@ dist-ssr
 .DS_Store
 *.suo
 *.ntvs*
-*.njsproj
-*.sln
 *.sw?
 
 src/modaptovc.Client/public/data/*

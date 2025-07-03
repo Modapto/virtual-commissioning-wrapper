@@ -1,7 +1,13 @@
-FROM node:23-alpine
+FROM node:alpine AS build
 WORKDIR /app
+
 COPY src/modaptovc.Client/package*.json ./
-RUN npm install
+RUN npm install --force
+
 COPY src/modaptovc.Client/ ./
-EXPOSE 55083
-CMD ["npm", "run", "dev"]
+RUN npm run build
+
+FROM nginx 
+COPY --from=build /app/dist /usr/share/nginx/html
+COPY --from=build /app/default.conf /etc/nginx/conf.d/default.conf
+

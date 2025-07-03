@@ -1,4 +1,4 @@
-import React, { JSX, ReactNode, SyntheticEvent, useState } from 'react'
+import React, { JSX, ReactNode, SyntheticEvent, useEffect, useState } from 'react'
 import './App.css'
 import { Radar } from 'react-chartjs-2';
 import {
@@ -12,7 +12,7 @@ import {
 } from 'chart.js';
 import { Box, Button, FormControl, InputLabel, MenuItem, Select, SelectChangeEvent, Tab, Alert, AlertColor, Fade } from '@mui/material';
 import { TabContext, TabList, TabPanel } from '@mui/lab';
-import { DTMClient, ModuleRequestFormat, ModuleRequestType } from './DTMClient';
+import { ApiException, DTMClient, ModuleRequestFormat, ModuleRequestType } from './DTMClient';
 import { Buffer } from 'buffer';
 
 ChartJS.register(
@@ -32,15 +32,15 @@ declare module 'react' {
 }
 
 function App() {
-    const host: string = 'http://localhost';
-    const backendPort: number = 5259;
-    const dtmPort: number = 8094;
-    const keycloakUsername: string = 'dtm-dev-username';
-    const keycloakPassword: string = 'dtm-dev-password';
-    const keycloakClientId: string = 'dtm-dev-client';
-    const keycloakPort: number = 8080;
-    const keycloakRealm: string = 'dtm-dev-realm';
-    const keycloakClientSecret: string = 'dtm-dev-client-secret';
+    const dtmUri: string = import.meta.env.VITE_DTM_URI;
+    const keycloakUri: string = import.meta.env.VITE_KEYCLOAK_URI;
+    const modaptoLoginUri: string | undefined = import.meta.env.VITE_MODAPTO_LOGIN_URI;
+    const backendUri: string = import.meta.env.VITE_BACKEND_URI;
+    const keycloakUsername: string | undefined = import.meta.env.VITE_KEYCLOAK_USERNAME;
+    const keycloakPassword: string | undefined = import.meta.env.VITE_KEYCLOAK_PASSWORD;
+    const keycloakRealm: string | undefined = import.meta.env.VITE_KEYCLOAK_REALM;
+    const keycloakClientId: string = import.meta.env.VITE_KEYCLOAK_CLIENT_ID;
+    const keycloakClientSecret: string = import.meta.env.VITE_KEYCLOAK_CLIENT_Secret;
 
     const [selectedTab, setSelectedTab] = useState<string>('1');
     const [selectedModuleId, setSelectedModuleId] = useState<string>('');
@@ -60,23 +60,51 @@ function App() {
     const [alertText, setAlertText] = useState<string | null>();
     const [alertSeverity, setAlertSeverity] = useState<AlertColor>();
 
-    let authToken: string | null = null;
-    const client = new DTMClient(host + ':' + dtmPort, {
+    let authToken: string | undefined;
+
+    const client = new DTMClient(dtmUri, {
         async fetch(url: RequestInfo, init: RequestInit) {
-            if (!authToken || !await validateAuthToken(authToken))
-                authToken = await getAuthToken();
+            if (!authToken || !await validateAuthToken(authToken)) {
+                if (keycloakUsername && keycloakPassword && keycloakRealm) {
+                    authToken = await getAuthToken();
+                }
+                else if (modaptoLoginUri) {
+                    const a = document.createElement('a');
+                    a.href = modaptoLoginUri!;
+                    a.target = '_self';//'_blank';
+                    a.click();
+                    a.remove();
+                }
+                //error
+            }
+
             init.headers['authorization'] = 'Bearer ' + authToken;
             return fetch(url, init);
         },
     });
 
+    useEffect(() => {
+        window.addEventListener('message', onRecievedAuthToken);
+        return () => {
+            window.removeEventListener("message", onRecievedAuthToken);
+        }
+    });
+
+    const onRecievedAuthToken = (event: MessageEvent) => {
+        if (!event.origin.startsWith(modaptoLoginUri!)) 
+            return;
+
+        authToken = event.data;
+    }
+
+
     const getMenuItems = async () => {
         const menuItems: JSX.Element[] = [];
         const modules = await client.getAllModules();
-        for (const module of modules) {
+        modules.forEach(async (module) => {
             const adminShell = JSON.parse(atob((await client.getModuleDetails(module.id!)).actualModel!)).assetAdministrationShells[0]
             menuItems.push(<MenuItem value={module.id} >{adminShell.idShort ?? adminShell.id}</MenuItem>);
-        }
+        });
         return menuItems;
     }
 
@@ -89,12 +117,12 @@ function App() {
             body: 'token=' + token + '&client_id=' + keycloakClientId + '&client_secret=' + keycloakClientSecret
         };
 
-        return await fetch(host + ':' + keycloakPort + '/realms/' + keycloakRealm + '/protocol/openid-connect/token/introspect', accessTokenValidationInit)
+        return await fetch(keycloakUri + '/realms/' + keycloakRealm + '/protocol/openid-connect/token/introspect', accessTokenValidationInit)
             .then((res: Response) => res.json())
             .then(json => { return json.active });
     }
 
-    const getAuthToken = async (): Promise<string> => {
+    const getAuthToken = async (): Promise<string | undefined> => {
         const authTokenInit: RequestInit = {
             method: 'POST',
             headers: {
@@ -103,7 +131,7 @@ function App() {
             body: 'grant_type=password&client_id=' + keycloakClientId + '&client_secret=' + keycloakClientSecret + '&username=' + keycloakUsername + '&password=' + keycloakPassword
         };
 
-        return await fetch(host + ':' + keycloakPort + '/realms/' + keycloakRealm + '/protocol/openid-connect/token', authTokenInit)
+        return await fetch(keycloakUri + '/realms/' + keycloakRealm + '/protocol/openid-connect/token', authTokenInit)
             .then((res: Response) => res.json())
             .then(json => { return json.access_token });
     }
@@ -116,6 +144,7 @@ function App() {
             a.download = selectedModuleId + '.json';
             a.click();
             URL.revokeObjectURL(a.href);
+            a.remove();
         });
     };
 
@@ -123,7 +152,7 @@ function App() {
         await loading(async () => {
             await client.deleteModule(selectedModuleId!)
                 .then(async () => {
-                    await fetch('http://localhost:' + backendPort + '/dt-' + selectedModuleId, { method: 'DELETE' }).catch(() => alert('error', 'PA Report removal unsuccesful'));
+                    await fetch(backendUri + '/pa-' + selectedModuleId, { method: 'DELETE' }).catch(() => alert('error', 'PA Report removal unsuccesful'));
                     setSelectedModuleId('');
                     setPAReportExists(false);
                     setChartData(null);
@@ -155,7 +184,7 @@ function App() {
         await loading(async () => {
             setSelectedModuleId(event.target.value);
 
-            paReportExists = (await fetch('http://localhost:' + backendPort + '/pa-' + event.target.value, {
+            paReportExists = (await fetch(backendUri + '/pa-' + event.target.value, {
                 method: 'Head'
             })).status === 200;
             setPAReportExists(paReportExists);
@@ -262,7 +291,7 @@ function App() {
                 for (const file of inputElement.files!) {
                     formData.append('files', file);
                 }
-                await fetch('http://localhost:' + backendPort + '/pa-' + selectedModuleId, {
+                await fetch(backendUri + '/pa-' + selectedModuleId, {
                     method: 'POST',
                     body: formData
                 })
@@ -286,7 +315,7 @@ function App() {
 
     const handleClickSavePAReport = async () => {
         await loading(async () => {
-            await fetch('http://localhost:' + backendPort + '/pa-' + selectedModuleId, {
+            await fetch(backendUri + '/pa-' + selectedModuleId, {
                 method: 'GET'
             })
                 .then(r => r.blob())
@@ -296,6 +325,7 @@ function App() {
                     a.download = selectedModuleId + '.zip';
                     a.click();
                     URL.revokeObjectURL(a.href);
+                    a.remove();
                 });
         });
     };
