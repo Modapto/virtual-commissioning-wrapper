@@ -6,7 +6,7 @@ services:
     volumes:
       - ./modaptovc/data:/app/public/data
     ports:
-      - 80:80
+      - 54321:8080
     depends_on:
       modaptovc-server:
         condition: service_started
@@ -19,6 +19,6 @@ services:
     volumes:
       - ./modaptovc/data:/app/data
     ports:
-      - 5259:5259
+      - 12345:8080
     networks:
       - modapto

@@ -1,4 +1,4 @@
-import React, { JSX, ReactNode, SyntheticEvent, useEffect, useState } from 'react'
+import { JSX, ReactNode, SyntheticEvent, useEffect, useState, useRef } from 'react'
 import './App.css'
 import { Radar } from 'react-chartjs-2';
 import {
@@ -10,9 +10,9 @@ import {
     Tooltip,
     Legend,
 } from 'chart.js';
-import { Box, Button, FormControl, InputLabel, MenuItem, Select, SelectChangeEvent, Tab, Alert, AlertColor, Fade } from '@mui/material';
+import { Box, Button, FormControl, InputLabel, MenuItem, Select, SelectChangeEvent, Tab, Alert, AlertColor, Fade, NativeSelect } from '@mui/material';
 import { TabContext, TabList, TabPanel } from '@mui/lab';
-import { ApiException, DTMClient, ModuleRequestFormat, ModuleRequestType } from './DTMClient';
+import { DTMClient, ModuleRequestFormat, ModuleRequestType } from './DTMClient';
 import { Buffer } from 'buffer';
 
 ChartJS.register(
@@ -32,15 +32,10 @@ declare module 'react' {
 }
 
 function App() {
-    const dtmUri: string = import.meta.env.VITE_DTM_URI;
-    const keycloakUri: string = import.meta.env.VITE_KEYCLOAK_URI;
-    const modaptoLoginUri: string | undefined = import.meta.env.VITE_MODAPTO_LOGIN_URI;
-    const backendUri: string = import.meta.env.VITE_BACKEND_URI;
-    const keycloakUsername: string | undefined = import.meta.env.VITE_KEYCLOAK_USERNAME;
-    const keycloakPassword: string | undefined = import.meta.env.VITE_KEYCLOAK_PASSWORD;
-    const keycloakRealm: string | undefined = import.meta.env.VITE_KEYCLOAK_REALM;
-    const keycloakClientId: string = import.meta.env.VITE_KEYCLOAK_CLIENT_ID;
-    const keycloakClientSecret: string = import.meta.env.VITE_KEYCLOAK_CLIENT_Secret;
+    const dtmClient = useRef<DTMClient>(null);
+    const modaptoLoginUri = useRef<string>(null);
+    const backendUri = useRef<string>(null);
+    const authToken = useRef<string>(null);
 
     const [selectedTab, setSelectedTab] = useState<string>('1');
     const [selectedModuleId, setSelectedModuleId] = useState<string>('');
@@ -60,85 +55,91 @@ function App() {
     const [alertText, setAlertText] = useState<string | null>();
     const [alertSeverity, setAlertSeverity] = useState<AlertColor>();
 
-    let authToken: string | undefined;
-
-    const client = new DTMClient(dtmUri, {
-        async fetch(url: RequestInfo, init: RequestInit) {
-            if (!authToken || !await validateAuthToken(authToken)) {
-                if (keycloakUsername && keycloakPassword && keycloakRealm) {
-                    authToken = await getAuthToken();
-                }
-                else if (modaptoLoginUri) {
-                    const a = document.createElement('a');
-                    a.href = modaptoLoginUri!;
-                    a.target = '_self';//'_blank';
-                    a.click();
-                    a.remove();
-                }
-                //error
-            }
-
-            init.headers['authorization'] = 'Bearer ' + authToken;
-            return fetch(url, init);
-        },
-    });
-
     useEffect(() => {
+        loading(async () => {
+            if (import.meta.env.PROD)
+                backendUri.current = window.location.href.replace(':54321', ':12345/api');
+            else
+                backendUri.current = 'http://localhost:12345/api'
+
+            await fetch(backendUri.current + '/config', { method: 'GET' })
+                .then((res) => res.json())
+                .then((json) => {
+                    dtmClient.current = new DTMClient(json.dtmUri, {
+                        async fetch(url: RequestInfo, init: RequestInit) {
+                            return await authTokenFetchInit(url, init);
+                        }
+                    });
+                    modaptoLoginUri.current = json.modaptoLoginUri;
+                })
+            setMenuItems(await getMenuItems())
+        })
+            /*.catch(errormeldung)*/;
+
         window.addEventListener('message', onRecievedAuthToken);
         return () => {
             window.removeEventListener("message", onRecievedAuthToken);
         }
-    });
+    }, []);
 
-    const onRecievedAuthToken = (event: MessageEvent) => {
-        if (!event.origin.startsWith(modaptoLoginUri!)) 
-            return;
+    const authTokenFetchInit = async (url: RequestInfo, init: RequestInit) => {
+        if (!authToken.current || !await validateAuthToken(authToken.current)) {
+            if (modaptoLoginUri.current) {
+                const a = document.createElement('a');
+                a.href = modaptoLoginUri.current!;
+                a.target = '_self';
+                a.click();
+                a.remove();
+            }
+            else {
+                authToken.current = await getAuthToken();
+            }
+        }
 
-        authToken = event.data;
+        init.headers['authorization'] = 'Bearer ' + authToken.current;
+        return fetch(url, init);
     }
 
+    const onRecievedAuthToken = (event: MessageEvent) => {
+        if (!event.origin.startsWith(modaptoLoginUri.current!))
+            return;
+
+        authToken.current = event.data;
+    }
 
     const getMenuItems = async () => {
         const menuItems: JSX.Element[] = [];
-        const modules = await client.getAllModules();
+        const modules = await dtmClient.current!.getAllModules();
         modules.forEach(async (module) => {
-            const adminShell = JSON.parse(atob((await client.getModuleDetails(module.id!)).actualModel!)).assetAdministrationShells[0]
+            const adminShell = JSON.parse(atob((await dtmClient.current!.getModuleDetails(module.id!)).actualModel!)).assetAdministrationShells[0];
             menuItems.push(<MenuItem value={module.id} >{adminShell.idShort ?? adminShell.id}</MenuItem>);
         });
         return menuItems;
     }
 
     const validateAuthToken = async (token: string): Promise<boolean> => {
-        const accessTokenValidationInit: RequestInit = {
+        const requestInit: RequestInit = {
             method: 'POST',
-            headers: {
-                'content-type': 'application/x-www-form-urlencoded'
-            },
-            body: 'token=' + token + '&client_id=' + keycloakClientId + '&client_secret=' + keycloakClientSecret
         };
 
-        return await fetch(keycloakUri + '/realms/' + keycloakRealm + '/protocol/openid-connect/token/introspect', accessTokenValidationInit)
+        return await fetch(backendUri.current + '/validateauthtoken?authToken=' + token, requestInit)
             .then((res: Response) => res.json())
-            .then(json => { return json.active });
+            .then(json => json.active);
     }
 
-    const getAuthToken = async (): Promise<string | undefined> => {
-        const authTokenInit: RequestInit = {
+    const getAuthToken = async (): Promise<string> => {
+        const requestInit: RequestInit = {
             method: 'POST',
-            headers: {
-                'content-type': 'application/x-www-form-urlencoded'
-            },
-            body: 'grant_type=password&client_id=' + keycloakClientId + '&client_secret=' + keycloakClientSecret + '&username=' + keycloakUsername + '&password=' + keycloakPassword
         };
 
-        return await fetch(keycloakUri + '/realms/' + keycloakRealm + '/protocol/openid-connect/token', authTokenInit)
+        return await fetch(backendUri.current + '/getauthtoken', requestInit)
             .then((res: Response) => res.json())
-            .then(json => { return json.access_token });
+            .then(json => json.access_token);
     }
 
     const handleClickSaveModule = async () => {
         await loading(async () => {
-            const blob = new Blob([atob((await client.getModuleDetails(selectedModuleId!)).actualModel!)], { type: 'text/json' });
+            const blob = new Blob([atob((await dtmClient.current!.getModuleDetails(selectedModuleId!)).actualModel!)], { type: 'text/json' });
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
             a.download = selectedModuleId + '.json';
@@ -150,12 +151,13 @@ function App() {
 
     const handleClickRemoveModule = async () => {
         await loading(async () => {
-            await client.deleteModule(selectedModuleId!)
+            await dtmClient.current!.deleteModule(selectedModuleId!)
                 .then(async () => {
-                    await fetch(backendUri + '/pa-' + selectedModuleId, { method: 'DELETE' }).catch(() => alert('error', 'PA Report removal unsuccesful'));
+                    await fetch(backendUri.current + '/pa-' + selectedModuleId, { method: 'DELETE' }).catch(() => alert('error', 'PA Report removal unsuccesful'));
                     setSelectedModuleId('');
                     setPAReportExists(false);
                     setChartData(null);
+                    setMenuItems(await getMenuItems());
                     alert('success', 'Removal succesful');
                 })
                 .catch(e => {
@@ -173,23 +175,17 @@ function App() {
             .catch(() => { })
     };
 
-    const handleOpenSelect = async (event: SyntheticEvent<Element, Event>) => {
-        await loading(async () => {
-            setMenuItems(await getMenuItems());
-        });
-    };
-
     const handleChangeSelect = async (event: SelectChangeEvent<string>, child: ReactNode) => {
         let paReportExists = false;
         await loading(async () => {
             setSelectedModuleId(event.target.value);
 
-            paReportExists = (await fetch(backendUri + '/pa-' + event.target.value, {
+            paReportExists = (await fetch(backendUri.current + '/pa-' + event.target.value, {
                 method: 'Head'
             })).status === 200;
             setPAReportExists(paReportExists);
             //MODAPTO_Sustainability_TechnicalParameters kann verschiedenen positionen sein
-            const submodel = JSON.parse(atob((await client.getModuleDetails(event.target.value)).actualModel!)).submodels[0];
+            const submodel = JSON.parse(atob((await dtmClient.current!.getModuleDetails(event.target.value)).actualModel!)).submodels[0];
             setChartData(submodel.submodelElements.find(s => s.idShort === 'TechnicalProperties')?.value
                 .find(s => s.idShort === 'MODAPTO_Sustainability_TechnicalParameters'));
         })
@@ -243,10 +239,11 @@ function App() {
                         }
                     }
                     inputElement.value = '';
-                    await client.createModule({ aas: data, format: format, type: ModuleRequestType.DOCKER, assetConnections: [] })
+                    await dtmClient.current!.createModule({ aas: data, format: format, type: ModuleRequestType.DOCKER, assetConnections: [] })
                         .then(() => alert('success', 'Upload succesful'))
                         .catch(() => alert('error', 'Upload unsuccesful'));
                 }
+                setMenuItems(await getMenuItems());
             });
         }
     };
@@ -256,19 +253,20 @@ function App() {
         if (inputElement.files && inputElement.files.length > 0) {
             await loading(async () => {
                 if (inputElement.files![0].name.endsWith('json')) {
-                    await client.updateModule(selectedModuleId, {
+                    await dtmClient.current!.updateModule(selectedModuleId, {
                         aas: btoa(await inputElement.files![0].text()),
                         format: ModuleRequestFormat.JSON,
                         type: ModuleRequestType.DOCKER
                     })
                 }
                 else if (inputElement.files![0].name.endsWith('aasx')) {
-                    await client.updateModule(selectedModuleId, {
+                    await dtmClient.current!.updateModule(selectedModuleId, {
                         aas: Buffer.from(await inputElement.files![0].arrayBuffer()).toString('base64'),
                         format: ModuleRequestFormat.AASX,
                         type: ModuleRequestType.DOCKER
                     })
                 }
+                setMenuItems(await getMenuItems());
             })
                 .then(async () => {
                     await loading(async () => {
@@ -291,7 +289,7 @@ function App() {
                 for (const file of inputElement.files!) {
                     formData.append('files', file);
                 }
-                await fetch(backendUri + '/pa-' + selectedModuleId, {
+                await fetch(backendUri.current + '/pa-' + selectedModuleId, {
                     method: 'POST',
                     body: formData
                 })
@@ -315,7 +313,7 @@ function App() {
 
     const handleClickSavePAReport = async () => {
         await loading(async () => {
-            await fetch(backendUri + '/pa-' + selectedModuleId, {
+            await fetch(backendUri.current + '/pa-' + selectedModuleId, {
                 method: 'GET'
             })
                 .then(r => r.blob())
@@ -379,7 +377,7 @@ function App() {
                 <br />
                 <FormControl disabled={disableSelectModule} fullWidth >
                     <InputLabel id='module-label'>Module</InputLabel>
-                    <Select onChange={handleChangeSelect} onOpen={handleOpenSelect} value={selectedModuleId} labelId='module-label' label='Module'>
+                    <Select onChange={handleChangeSelect} value={selectedModuleId} labelId='module-label' label='Module'>
                         {menuItems}
                     </Select>
                 </FormControl>

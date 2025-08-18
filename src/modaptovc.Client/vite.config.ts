@@ -5,6 +5,6 @@ export default defineConfig({
     plugins: [plugin()],
     appType: 'mpa',
     server: {
-        port: 55083
+        port: 54321
     }
 })

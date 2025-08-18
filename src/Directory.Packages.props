@@ -4,7 +4,9 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageVersion Include="ErrorProne.NET.Structs" Version="0.6.1-beta.1" />
-    <PackageVersion Include="ErrorProne.NET.CoreAnalyzers" Version="0.6.1-beta.1" />
-    <PackageVersion Include="Swashbuckle.AspNetCore" Version="7.0.0" />
+    <PackageVersion Include="ErrorProne.NET.CoreAnalyzers" Version="0.8.0-beta.1" />
+    <PackageVersion Include="Microsoft.AspNetCore.SpaProxy" Version="8.0.18" />
+    <PackageVersion Include="Schick.Keycloak.RestApiClient" Version="26.2.0" />
+    <PackageVersion Include="Swashbuckle.AspNetCore" Version="8.1.4" />
   </ItemGroup>
 </Project>

@@ -8,8 +8,8 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 WebApplication app = builder.Build();
-app.Urls.Add("http://0.0.0.0:5259");
-app.Urls.Add("https://0.0.0.0:7281");
+app.Urls.Add("http://0.0.0.0:12345");
+app.Urls.Add("https://0.0.0.0:8443");
 app.UseDefaultFiles();
 app.UseStaticFiles();
 

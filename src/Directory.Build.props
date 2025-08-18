@@ -1,7 +1,6 @@
 <Project>
   <PropertyGroup>
     <VersionPrefix>0.0.1</VersionPrefix>
-
     <Product>modaptovc</Product>
     <Description></Description>
   </PropertyGroup>

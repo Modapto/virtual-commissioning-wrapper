@@ -5,17 +5,17 @@
       "type": "edge",
       "request": "launch",
       "name": "localhost (Edge)",
-      "url": "http://localhost:55083",
+      "url": "http://localhost:54321",
       "webRoot": "${workspaceFolder}",
-      "runtimeArgs": [ "--disable-web-security" ],
+      "runtimeArgs": [ "--disable-web-security" ]
     },
     {
       "type": "chrome",
       "request": "launch",
       "name": "localhost (Chrome)",
-      "url": "http://localhost:55083",
+      "url": "http://localhost:54321",
       "webRoot": "${workspaceFolder}",
-      "runtimeArgs": [ "--disable-web-security" ],
+      "runtimeArgs": [ "--disable-web-security" ]
     }
   ]
 }

@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace modaptovc.Server.Controllers;
 
 [ApiController]
-public class PAReportController : ControllerBase
+public partial class PAReportController : ControllerBase
 {
     public PAReportController(ILogger<PAReportController> logger)
     {
@@ -12,30 +12,39 @@ public class PAReportController : ControllerBase
     }
 
     [HttpHead]
-    [Route("healthy")]
+    [Route("/api/healthy")]
     public IActionResult Healthy()
     {
         return Ok();
     }
 
+    [HttpGet]
+    [Route("/api/config")]
+    public IActionResult GetConfig()
+    {
+        return Ok(new VCConfig());
+    }
+
     [HttpHead]
-    [Route("/pa-{moduleId}")]
+    [Route("/api/pa-{moduleId}")]
     public IActionResult PAReportExists(string moduleId)
     {
         return System.IO.File.Exists(Path.Combine(toModulePath(moduleId), "index.html")) ? Ok() : NotFound();
     }
 
     [HttpDelete]
-    [Route("/pa-{moduleId}")]
+    [Route("/api/pa-{moduleId}")]
     public IActionResult DeletePAReport(string moduleId)
     {
-        Directory.Delete(toModulePath(moduleId), true);
+        string modulePath = toModulePath(moduleId);
+        if (Path.Exists(modulePath))
+            Directory.Delete(modulePath, true);
 
         return Ok();
     }
 
     [HttpGet]
-    [Route("/pa-{moduleId}")]
+    [Route("/api/pa-{moduleId}")]
     public async Task<IActionResult> GetPAReport(string moduleId)
     {
         MemoryStream memoryStream = new MemoryStream();
@@ -48,23 +57,8 @@ public class PAReportController : ControllerBase
         return File(memoryStream, "application/zip", $"pa-{moduleId}.zip");
     }
 
-    private void addFilesToZip(ZipArchive zip, string basePath, string folderPath)
-    {
-        foreach (string childFolderPath in Directory.GetDirectories(folderPath)) {
-            zip.CreateEntry(childFolderPath.Replace(basePath, "") + '/');
-            addFilesToZip(zip, basePath, childFolderPath);
-        }
-
-        foreach (string filePath in Directory.GetFiles(folderPath)) {
-            ZipArchiveEntry entry = zip.CreateEntry(filePath.Replace(basePath, ""));
-            using Stream entryStream = entry.Open();
-            using FileStream fileStream = System.IO.File.OpenRead(filePath);
-            fileStream.CopyTo(entryStream);
-        }
-    }
-
     [HttpPost]
-    [Route("/pa-{moduleId}")]
+    [Route("/api/pa-{moduleId}")]
     public async Task<IActionResult> PostPAReport(string moduleId, IFormFileCollection files)
     {
         //what if already exists
@@ -90,6 +84,21 @@ public class PAReportController : ControllerBase
         }
 
         return Ok();
+    }
+
+    private void addFilesToZip(ZipArchive zip, string basePath, string folderPath)
+    {
+        foreach (string childFolderPath in Directory.GetDirectories(folderPath)) {
+            zip.CreateEntry(childFolderPath.Replace(basePath, "") + '/');
+            addFilesToZip(zip, basePath, childFolderPath);
+        }
+
+        foreach (string filePath in Directory.GetFiles(folderPath)) {
+            ZipArchiveEntry entry = zip.CreateEntry(filePath.Replace(basePath, ""));
+            using Stream entryStream = entry.Open();
+            using FileStream fileStream = System.IO.File.OpenRead(filePath);
+            fileStream.CopyTo(entryStream);
+        }
     }
 
     private static string toModulePath(string? moduleId)
