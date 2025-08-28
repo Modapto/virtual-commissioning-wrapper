@@ -1,5 +1,4 @@
 using System.Text;
-using Microsoft.AspNetCore.Http.Headers;
 using Microsoft.AspNetCore.Mvc;
 
 namespace modaptovc.Server.Controllers;
@@ -27,8 +26,8 @@ public partial class KeycloakController : ControllerBase
         return response.IsSuccessStatusCode ? Ok(await response.Content.ReadAsStringAsync()) : BadRequest(response);
     }
 
-    [HttpPost]
-    [Route("/api/getauthtoken")]//Get???
+    [HttpGet]
+    [Route("/api/authtoken")]
     public async Task<IActionResult> GetAuthToken()
     {
         using HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Post, "/realms/" + Environment.GetEnvironmentVariable("KEYCLOAK_REALM") + "/protocol/openid-connect/token") {

@@ -1,0 +1,15 @@
+(handling) {
+        handle /hello {
+                respond "Hello world"
+        }
+        handle /api/* {
+                reverse_proxy http://modaptovc-server:8080
+        }
+        handle {
+                reverse_proxy http://modaptovc-client:8080
+        }
+}
+https:// {
+        tls {$CADDY_CERTIFICATE} {$CADDY_PRIVATE_KEY}
+        import handling
+}

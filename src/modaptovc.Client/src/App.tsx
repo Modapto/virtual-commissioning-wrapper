@@ -33,7 +33,7 @@ declare module 'react' {
 
 function App() {
     const dtmClient = useRef<DTMClient>(null);
-    const modaptoLoginUri = useRef<string>(null);
+    const modaptoUri = useRef<string>(null);
     const backendUri = useRef<string>(null);
     const authToken = useRef<string>(null);
 
@@ -57,10 +57,23 @@ function App() {
 
     useEffect(() => {
         loading(async () => {
-            if (import.meta.env.PROD)
-                backendUri.current = window.location.href.replace(':54321', ':12345/api');
+            if (import.meta.env.PROD) {
+                let occurances = 0;
+
+                for (let i = 0; i < window.location.href.length; i++) {
+                    if (window.location.href[i] == '/') {
+                        occurances++;
+                        if (occurances == 3) {
+                            backendUri.current = window.location.href.substring(0, i) + '/api';
+                            break;
+                        }
+                    }
+                }
+                if (!backendUri.current)
+                    backendUri.current = window.location.href + '/api';
+            }
             else
-                backendUri.current = 'http://localhost:12345/api'
+                backendUri.current = 'http://localhost:12345/api';
 
             await fetch(backendUri.current + '/config', { method: 'GET' })
                 .then((res) => res.json())
@@ -70,7 +83,7 @@ function App() {
                             return await authTokenFetchInit(url, init);
                         }
                     });
-                    modaptoLoginUri.current = json.modaptoLoginUri;
+                    modaptoUri.current = json.modaptoUri;
                 })
             setMenuItems(await getMenuItems())
         })
@@ -84,9 +97,9 @@ function App() {
 
     const authTokenFetchInit = async (url: RequestInfo, init: RequestInit) => {
         if (!authToken.current || !await validateAuthToken(authToken.current)) {
-            if (modaptoLoginUri.current) {
+            if (modaptoUri.current) {
                 const a = document.createElement('a');
-                a.href = modaptoLoginUri.current!;
+                a.href = modaptoUri.current!;
                 a.target = '_self';
                 a.click();
                 a.remove();
@@ -101,10 +114,11 @@ function App() {
     }
 
     const onRecievedAuthToken = (event: MessageEvent) => {
-        if (!event.origin.startsWith(modaptoLoginUri.current!))
+        if (!event.origin.startsWith(modaptoUri.current!))
             return;
 
-        authToken.current = event.data;
+        console.log("Recieved: " + event.data)
+        authToken.current = event.data.serviceToken;
     }
 
     const getMenuItems = async () => {
@@ -129,10 +143,10 @@ function App() {
 
     const getAuthToken = async (): Promise<string> => {
         const requestInit: RequestInit = {
-            method: 'POST',
+            method: 'GET',
         };
 
-        return await fetch(backendUri.current + '/getauthtoken', requestInit)
+        return await fetch(backendUri.current + '/authtoken', requestInit)
             .then((res: Response) => res.json())
             .then(json => json.access_token);
     }
@@ -153,7 +167,8 @@ function App() {
         await loading(async () => {
             await dtmClient.current!.deleteModule(selectedModuleId!)
                 .then(async () => {
-                    await fetch(backendUri.current + '/pa-' + selectedModuleId, { method: 'DELETE' }).catch(() => alert('error', 'PA Report removal unsuccesful'));
+                    await fetch(backendUri.current + '/pa-' + selectedModuleId, { method: 'DELETE' })
+                        .catch(() => alert('error', 'PA Report removal unsuccesful'));
                     setSelectedModuleId('');
                     setPAReportExists(false);
                     setChartData(null);

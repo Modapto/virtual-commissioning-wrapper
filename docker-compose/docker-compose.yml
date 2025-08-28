@@ -1,0 +1,46 @@
+services:
+  caddy:
+    image: caddy:latest
+    container_name: caddy
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile
+      - ./certs:/certs
+    environment:
+      CADDY_CERTIFICATE: /certs/modaptovc.crt
+      CADDY_PRIVATE_KEY: /certs/modaptovc.key
+    depends_on:
+      modaptovc-client:
+        condition: service_started
+  modaptovc-client:
+    image: modaptovc.client:latest
+    container_name: modaptovc-client
+    restart: unless-stopped
+    volumes:
+      #- ./modaptovc/data:/app/public/data
+      - modaptovc_volume:/app/public/data
+    depends_on:
+      modaptovc-server:
+        condition: service_started
+  modaptovc-server:
+    image: modaptovc.server:latest
+    container_name: modaptovc-server
+    restart: unless-stopped
+    volumes:
+      #- ./modaptovc/data:/app/data
+      - modaptovc_volume:/app/data
+    environment:
+      DTM_URI: "http://localhost:8094"
+      KEYCLOAK_CLIENT_ID: "dtm-dev-client"
+      KEYCLOAK_CLIENT_SECRET: "dtm-dev-client-secret"
+      KEYCLOAK_REALM: "dtm-dev-realm"
+      KEYCLOAK_USERNAME: "dtm-dev-username"
+      KEYCLOAK_PASSWORD: "dtm-dev-password"
+      KEYCLOAK_URI: "http://localhost:8080"
+      MODAPTO_URI: https://dashboard.fft.modapto.atc.gr
+volumes:
+  modaptovc_volume:
