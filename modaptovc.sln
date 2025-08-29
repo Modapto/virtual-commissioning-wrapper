@@ -8,6 +8,8 @@ Project("{54A90642-561A-4BB1-A94E-469ADEE60C69}") = "modaptovc.Client", "src\mod
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "modaptovc.Server", "src\modaptovc.Server\modaptovc.Server.csproj", "{4FF69E6D-17FB-4EBC-A78D-A0508EEC7DF6}"
 EndProject
+Project("{54A90642-561A-4BB1-A94E-469ADEE60C69}") = "modaptovc.Client.IFrame", "src\modaptovc.Client.Frame\modaptovc.Client.IFrame.esproj", "{A84CD05A-6A01-F38E-AA80-8D4713496F1F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -26,6 +28,12 @@ Global
 		{4FF69E6D-17FB-4EBC-A78D-A0508EEC7DF6}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{4FF69E6D-17FB-4EBC-A78D-A0508EEC7DF6}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{4FF69E6D-17FB-4EBC-A78D-A0508EEC7DF6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A84CD05A-6A01-F38E-AA80-8D4713496F1F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A84CD05A-6A01-F38E-AA80-8D4713496F1F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A84CD05A-6A01-F38E-AA80-8D4713496F1F}.Debug|Any CPU.Deploy.0 = Debug|Any CPU
+		{A84CD05A-6A01-F38E-AA80-8D4713496F1F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A84CD05A-6A01-F38E-AA80-8D4713496F1F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A84CD05A-6A01-F38E-AA80-8D4713496F1F}.Release|Any CPU.Deploy.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

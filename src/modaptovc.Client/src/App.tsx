@@ -10,7 +10,7 @@ import {
     Tooltip,
     Legend,
 } from 'chart.js';
-import { Box, Button, FormControl, InputLabel, MenuItem, Select, SelectChangeEvent, Tab, Alert, AlertColor, Fade, NativeSelect } from '@mui/material';
+import { Box, Button, FormControl, InputLabel, MenuItem, Select, SelectChangeEvent, Tab, Alert, AlertColor, Fade } from '@mui/material';
 import { TabContext, TabList, TabPanel } from '@mui/lab';
 import { DTMClient, ModuleRequestFormat, ModuleRequestType } from './DTMClient';
 import { Buffer } from 'buffer';
@@ -57,6 +57,8 @@ function App() {
 
     useEffect(() => {
         loading(async () => {
+            window.addEventListener('message', onRecievedAuthToken);
+
             if (import.meta.env.PROD) {
                 let occurances = 0;
 
@@ -85,19 +87,28 @@ function App() {
                     });
                     modaptoUri.current = json.modaptoUri;
                 })
-            setMenuItems(await getMenuItems())
         })
             /*.catch(errormeldung)*/;
-
-        window.addEventListener('message', onRecievedAuthToken);
         return () => {
             window.removeEventListener("message", onRecievedAuthToken);
         }
     }, []);
 
+    const handleOpenSelect = async (event: SyntheticEvent) => {
+        await loading(async () => {
+            setMenuItems(await getMenuItems());
+        });
+    };
+
     const authTokenFetchInit = async (url: RequestInfo, init: RequestInit) => {
         if (!authToken.current || !await validateAuthToken(authToken.current)) {
+            let modaptoReachable = false;
             if (modaptoUri.current) {
+                await fetch(modaptoUri.current, { method: 'Head' })
+                    .then(() => modaptoReachable = true).catch(() => { });
+            }
+
+            if (modaptoReachable) {
                 const a = document.createElement('a');
                 a.href = modaptoUri.current!;
                 a.target = '_self';
@@ -114,39 +125,31 @@ function App() {
     }
 
     const onRecievedAuthToken = (event: MessageEvent) => {
-        if (!event.origin.startsWith(modaptoUri.current!))
-            return;
-
-        console.log("Recieved: " + event.data)
-        authToken.current = event.data.serviceToken;
+        const { serviceToken, refreshToken } = event.data;
+        if (event.origin.startsWith(modaptoUri.current!) && event.data.type == 'AUTH_TOKENS') {
+            console.log("Recieved: " + serviceToken);
+            authToken.current = serviceToken;
+        }
     }
 
     const getMenuItems = async () => {
         const menuItems: JSX.Element[] = [];
         const modules = await dtmClient.current!.getAllModules();
-        modules.forEach(async (module) => {
+        for (const module of modules) {
             const adminShell = JSON.parse(atob((await dtmClient.current!.getModuleDetails(module.id!)).actualModel!)).assetAdministrationShells[0];
             menuItems.push(<MenuItem value={module.id} >{adminShell.idShort ?? adminShell.id}</MenuItem>);
-        });
+        }
         return menuItems;
     }
 
     const validateAuthToken = async (token: string): Promise<boolean> => {
-        const requestInit: RequestInit = {
-            method: 'POST',
-        };
-
-        return await fetch(backendUri.current + '/validateauthtoken?authToken=' + token, requestInit)
+        return await fetch(backendUri.current + '/validateauthtoken?authtoken=' + token, { method: 'POST' })
             .then((res: Response) => res.json())
             .then(json => json.active);
     }
 
     const getAuthToken = async (): Promise<string> => {
-        const requestInit: RequestInit = {
-            method: 'GET',
-        };
-
-        return await fetch(backendUri.current + '/authtoken', requestInit)
+        return await fetch(backendUri.current + '/authtoken', { method: 'GET' })
             .then((res: Response) => res.json())
             .then(json => json.access_token);
     }
@@ -167,12 +170,11 @@ function App() {
         await loading(async () => {
             await dtmClient.current!.deleteModule(selectedModuleId!)
                 .then(async () => {
-                    await fetch(backendUri.current + '/pa-' + selectedModuleId, { method: 'DELETE' })
+                    await fetch(backendUri.current + '/' + selectedModuleId, { method: 'DELETE' })
                         .catch(() => alert('error', 'PA Report removal unsuccesful'));
                     setSelectedModuleId('');
                     setPAReportExists(false);
                     setChartData(null);
-                    setMenuItems(await getMenuItems());
                     alert('success', 'Removal succesful');
                 })
                 .catch(e => {
@@ -195,9 +197,7 @@ function App() {
         await loading(async () => {
             setSelectedModuleId(event.target.value);
 
-            paReportExists = (await fetch(backendUri.current + '/pa-' + event.target.value, {
-                method: 'Head'
-            })).status === 200;
+            paReportExists = (await fetch(backendUri.current + '/' + event.target.value, { method: 'Head' })).ok;
             setPAReportExists(paReportExists);
             //MODAPTO_Sustainability_TechnicalParameters kann verschiedenen positionen sein
             const submodel = JSON.parse(atob((await dtmClient.current!.getModuleDetails(event.target.value)).actualModel!)).submodels[0];
@@ -258,7 +258,6 @@ function App() {
                         .then(() => alert('success', 'Upload succesful'))
                         .catch(() => alert('error', 'Upload unsuccesful'));
                 }
-                setMenuItems(await getMenuItems());
             });
         }
     };
@@ -281,16 +280,18 @@ function App() {
                         type: ModuleRequestType.DOCKER
                     })
                 }
-                setMenuItems(await getMenuItems());
             })
-                .then(async () => {
-                    await loading(async () => {
-                        inputElement.value = '';
-                        setSelectedModuleId('');
-                        setPAReportExists(false);
-                        setChartData(null);
-                        alert('success', 'Update succesful');
-                    });
+                .then(() => {
+                    setDisableUpdateModule(true);
+                    setDisableUploadPAReport(true);
+                    setDisableSaveModule(true);
+                    setDisableSavePAReport(true);
+                    setDisableRemoveModule(true);
+                    inputElement.value = '';
+                    setSelectedModuleId('');
+                    setPAReportExists(false);
+                    setChartData(null);
+                    alert('success', 'Update succesful');
                 })
                 .catch(() => alert('error', 'Update unsuccesful'));
         }
@@ -304,7 +305,7 @@ function App() {
                 for (const file of inputElement.files!) {
                     formData.append('files', file);
                 }
-                await fetch(backendUri.current + '/pa-' + selectedModuleId, {
+                await fetch(backendUri.current + '/' + selectedModuleId, {
                     method: 'POST',
                     body: formData
                 })
@@ -328,9 +329,7 @@ function App() {
 
     const handleClickSavePAReport = async () => {
         await loading(async () => {
-            await fetch(backendUri.current + '/pa-' + selectedModuleId, {
-                method: 'GET'
-            })
+            await fetch(backendUri.current + '/' + selectedModuleId, { method: 'GET' })
                 .then(r => r.blob())
                 .then(blob => {
                     const a = document.createElement('a');
@@ -392,7 +391,7 @@ function App() {
                 <br />
                 <FormControl disabled={disableSelectModule} fullWidth >
                     <InputLabel id='module-label'>Module</InputLabel>
-                    <Select onChange={handleChangeSelect} value={selectedModuleId} labelId='module-label' label='Module'>
+                    <Select onChange={handleChangeSelect} onOpen={handleOpenSelect} value={selectedModuleId} labelId='module-label' label='Module'>
                         {menuItems}
                     </Select>
                 </FormControl>

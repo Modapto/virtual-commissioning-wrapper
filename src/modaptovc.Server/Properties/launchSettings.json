@@ -23,7 +23,8 @@
         "KEYCLOAK_REALM": "dtm-dev-realm",
         "KEYCLOAK_USERNAME": "dtm-dev-username",
         "KEYCLOAK_PASSWORD": "dtm-dev-password",
-        "KEYCLOAK_URI": "http://localhost:8080"
+        "KEYCLOAK_URI": "http://localhost:8080",
+        "MODAPTO_URI": "http://localhost:45312"
       }
     }
   },

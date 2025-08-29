@@ -16,10 +16,10 @@ public partial class KeycloakController : ControllerBase
 
     [HttpPost]
     [Route("/api/validateauthtoken")]
-    public async Task<IActionResult> ValidateAuthToken(string authToken)
+    public async Task<IActionResult> ValidateAuthToken(string authtoken)
     {
         using HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Post, "/realms/" + Environment.GetEnvironmentVariable("KEYCLOAK_REALM") + "/protocol/openid-connect/token/introspect") {
-            Content = new StringContent("token=" + authToken + "&client_id=" + Environment.GetEnvironmentVariable("KEYCLOAK_CLIENT_ID") + "&client_secret=" + Environment.GetEnvironmentVariable("KEYCLOAK_CLIENT_SECRET"), Encoding.UTF8, "application/x-www-form-urlencoded")
+            Content = new StringContent("token=" + authtoken + "&client_id=" + Environment.GetEnvironmentVariable("KEYCLOAK_CLIENT_ID") + "&client_secret=" + Environment.GetEnvironmentVariable("KEYCLOAK_CLIENT_SECRET"), Encoding.UTF8, "application/x-www-form-urlencoded")
         };
 
         HttpResponseMessage response = await m_httpClient.SendAsync(request);

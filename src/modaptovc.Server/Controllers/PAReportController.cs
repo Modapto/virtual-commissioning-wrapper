@@ -26,14 +26,14 @@ public partial class PAReportController : ControllerBase
     }
 
     [HttpHead]
-    [Route("/api/pa-{moduleId}")]
+    [Route("/api/{moduleId}")]
     public IActionResult PAReportExists(string moduleId)
     {
         return System.IO.File.Exists(Path.Combine(toModulePath(moduleId), "index.html")) ? Ok() : NotFound();
     }
 
     [HttpDelete]
-    [Route("/api/pa-{moduleId}")]
+    [Route("/api/{moduleId}")]
     public IActionResult DeletePAReport(string moduleId)
     {
         string modulePath = toModulePath(moduleId);
@@ -44,7 +44,7 @@ public partial class PAReportController : ControllerBase
     }
 
     [HttpGet]
-    [Route("/api/pa-{moduleId}")]
+    [Route("/api/{moduleId}")]
     public async Task<IActionResult> GetPAReport(string moduleId)
     {
         MemoryStream memoryStream = new MemoryStream();
@@ -58,7 +58,7 @@ public partial class PAReportController : ControllerBase
     }
 
     [HttpPost]
-    [Route("/api/pa-{moduleId}")]
+    [Route("/api/{moduleId}")]
     public async Task<IActionResult> PostPAReport(string moduleId, IFormFileCollection files)
     {
         //what if already exists
