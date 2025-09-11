@@ -125,8 +125,10 @@ function App() {
     }
 
     const onRecievedAuthToken = (event: MessageEvent) => {
+        console.log("Recieved: " + event.data.type);
         const { serviceToken, refreshToken } = event.data;
-        if (event.origin.startsWith(modaptoUri.current!) && event.data.type == 'AUTH_TOKENS') {
+        //event.origin.startsWith(modaptoUri.current!) &&
+        if (event.data.type == 'AUTH_TOKENS') {
             console.log("Recieved: " + serviceToken);
             authToken.current = serviceToken;
         }
