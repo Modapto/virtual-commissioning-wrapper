@@ -102,21 +102,26 @@ function App() {
 
     const authTokenFetchInit = async (url: RequestInfo, init: RequestInit) => {
         if (!authToken.current || !await validateAuthToken(authToken.current)) {
-            let modaptoReachable = false;
-            if (modaptoUri.current) {
-                await fetch(modaptoUri.current, { method: 'Head' })
-                    .then(() => modaptoReachable = true).catch(() => { });
-            }
+            window.parent.postMessage({ type: 'REQUEST_TOKENS' }, '*');
+            await new Promise(res => setTimeout(res, 1000));
 
-            if (modaptoReachable) {
-                const a = document.createElement('a');
-                a.href = modaptoUri.current!;
-                a.target = '_self';
-                a.click();
-                a.remove();
-            }
-            else {
-                authToken.current = await getAuthToken();
+            if (!authToken.current) {
+                let modaptoReachable = false;
+                if (modaptoUri.current) {
+                    await fetch(modaptoUri.current, { method: 'Head' })
+                        .then(() => modaptoReachable = true).catch(() => { });
+                }
+
+                if (modaptoReachable) {
+                    const a = document.createElement('a');
+                    a.href = modaptoUri.current!;
+                    a.target = '_self';
+                    a.click();
+                    a.remove();
+                }
+                else {
+                    authToken.current = await getAuthToken();
+                }
             }
         }
 
@@ -131,6 +136,7 @@ function App() {
         if (event.data.type == 'AUTH_TOKENS') {
             console.log("Recieved: " + serviceToken);
             authToken.current = serviceToken;
+            window.parent.postMessage({ type: 'REQUEST_TOKENS_RECIEVED' }, '*');
         }
     }
 

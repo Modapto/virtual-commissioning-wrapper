@@ -9,18 +9,27 @@ function App() {
     const [disableSendToken, setDisableSendToken] = useState<boolean>(false);
 
     useEffect(() => {
-        loading(async () => {
-            await sendToken();
-        });
+        window.addEventListener('message', onRequestAuthTokens);
+        return () => {
+            window.removeEventListener("message", onRequestAuthTokens);
+        }
     }, []);
 
-    const handleClickSendToken = async () => {
+    const handleClickSendAuthTokens = async () => {
         loading(async () => {
-            await sendToken();
+            await sendAuthTokens();
         });
     };
 
-    const sendToken = async () => {
+    const onRequestAuthTokens = (event: MessageEvent) => {
+        if (event.data.type == 'REQUEST_TOKENS') {
+            loading(async () => {
+                await sendAuthTokens();
+            });
+        }
+    }
+
+    const sendAuthTokens = async () => {
         const json = await fetch(backendUri + '/authtoken', { method: 'GET' })
             .then((res: Response) => res.json());
         const frame: HTMLIFrameElement = document.getElementsByName("iframeRef").item(0);
@@ -48,7 +57,7 @@ function App() {
 
     return (
         <div>
-            <Button disabled={disableSendToken} onClick={handleClickSendToken}>Send Token</Button>
+            <Button disabled={disableSendToken} onClick={handleClickSendAuthTokens}>Send Token</Button>
             <iframe name='iframeRef' src={frontendUri} scrolling='omit' style={{ position: 'absolute', width: '100%', height: '100%' }} />
         </div>
     );
