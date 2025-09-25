@@ -8,9 +8,12 @@ public partial class KeycloakController : ControllerBase
 {
     public KeycloakController(ILogger<KeycloakController> logger)
     {
+        string? keycloakUri = Environment.GetEnvironmentVariable("KEYCLOAK_URI");
+        ArgumentNullException.ThrowIfNull(keycloakUri);
+
         m_logger = logger;
         m_httpClient = new HttpClient() {
-            BaseAddress = new Uri(Environment.GetEnvironmentVariable("KEYCLOAK_URI") ?? throw new ArgumentNullException("KEYCLOAK_URI"))
+            BaseAddress = new Uri(keycloakUri)
         };
     }
 

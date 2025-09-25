@@ -86,7 +86,7 @@ public partial class PAReportController : ControllerBase
         return Ok();
     }
 
-    private void addFilesToZip(ZipArchive zip, string basePath, string folderPath)
+    private static void addFilesToZip(ZipArchive zip, string basePath, string folderPath)
     {
         foreach (string childFolderPath in Directory.GetDirectories(folderPath)) {
             zip.CreateEntry(childFolderPath.Replace(basePath, "") + '/');

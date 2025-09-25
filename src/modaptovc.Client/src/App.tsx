@@ -1,4 +1,4 @@
-import { JSX, ReactNode, SyntheticEvent, useEffect, useState, useRef } from 'react'
+import { ReactNode, SyntheticEvent, useEffect, useState, useRef } from 'react'
 import './App.css'
 import { Radar } from 'react-chartjs-2';
 import {
@@ -12,7 +12,7 @@ import {
 } from 'chart.js';
 import { Box, Button, FormControl, InputLabel, MenuItem, Select, SelectChangeEvent, Tab, Alert, AlertColor, Fade } from '@mui/material';
 import { TabContext, TabList, TabPanel } from '@mui/lab';
-import { DTMClient, ModuleRequestFormat, ModuleRequestType } from './DTMClient';
+import { DTMClient, ModuleDetailsResponse, ModuleRequest, ModuleRequestFormat, ModuleRequestType, ModuleResponse } from './DTMClient';
 import { Buffer } from 'buffer';
 
 ChartJS.register(
@@ -31,6 +31,18 @@ declare module 'react' {
     }
 }
 
+interface TechnicalParameters {
+    name: string;
+    description: string | undefined;
+    value: TechnicalParameter[] | undefined;
+}
+
+interface TechnicalParameter {
+    idShort: string;
+    description: string | undefined;
+    value: number | undefined;
+}
+
 function App() {
     const dtmClient = useRef<DTMClient>(null);
     const modaptoUri = useRef<string>(null);
@@ -40,8 +52,7 @@ function App() {
     const [selectedTab, setSelectedTab] = useState<string>('1');
     const [selectedModuleId, setSelectedModuleId] = useState<string>('');
     const [paReportExists, setPAReportExists] = useState<boolean>(false);
-    const [chartData, setChartData] = useState<unknown | null>();
-    const [menuItems, setMenuItems] = useState<JSX.Element[]>([]);
+    const [modules] = useState<{ [shortId: string]: TechnicalParameters | undefined; }>({});
 
     const [disableUploadModule, setDisableUploadModule] = useState<boolean>(false);
     const [disableUpdateModule, setDisableUpdateModule] = useState<boolean>(true);
@@ -54,6 +65,8 @@ function App() {
     const [showAlert, setShowAlert] = useState<boolean>(false);
     const [alertText, setAlertText] = useState<string | null>();
     const [alertSeverity, setAlertSeverity] = useState<AlertColor>();
+
+    const technicalPropertiesWhitelist = ['EnergyConsumption', 'CarbonEmission', 'Cycle Time', 'Costs', 'EnergyMix'];
 
     useEffect(() => {
         loading(async () => {
@@ -86,68 +99,47 @@ function App() {
                         }
                     });
                     modaptoUri.current = json.modaptoUri;
-                })
-        })
-            /*.catch(errormeldung)*/;
+                });
+        });
         return () => {
             window.removeEventListener("message", onRecievedAuthToken);
         }
     }, []);
 
-    const handleOpenSelect = async (event: SyntheticEvent) => {
-        await loading(async () => {
-            setMenuItems(await getMenuItems());
-        });
-    };
-
     const authTokenFetchInit = async (url: RequestInfo, init: RequestInit) => {
         if (!authToken.current || !await validateAuthToken(authToken.current)) {
             window.parent.postMessage({ type: 'REQUEST_TOKENS' }, '*');
-            await new Promise(res => setTimeout(res, 1000));
+            await wait(1000);
 
             if (!authToken.current) {
-                let modaptoReachable = false;
                 if (modaptoUri.current) {
-                    await fetch(modaptoUri.current, { method: 'Head' })
-                        .then(() => modaptoReachable = true).catch(() => { });
-                }
-
-                if (modaptoReachable) {
-                    const a = document.createElement('a');
-                    a.href = modaptoUri.current!;
-                    a.target = '_self';
-                    a.click();
-                    a.remove();
-                }
-                else {
-                    authToken.current = await getAuthToken();
+                    await fetch(modaptoUri.current, { method: 'HEAD' })
+                        .then(() => {
+                            const a = document.createElement('a');
+                            a.href = modaptoUri.current!;
+                            a.target = '_self';
+                            a.click();
+                            a.remove();
+                        }).catch(async () => {
+                            authToken.current = await getAuthToken();
+                        });
                 }
             }
         }
 
-        init.headers['authorization'] = 'Bearer ' + authToken.current;
+        (init.headers as any).authorization = 'Bearer ' + authToken.current;
         return fetch(url, init);
     }
 
     const onRecievedAuthToken = (event: MessageEvent) => {
-        console.log("Recieved: " + event.data.type);
-        const { serviceToken, refreshToken } = event.data;
-        //event.origin.startsWith(modaptoUri.current!) &&
-        if (event.data.type == 'AUTH_TOKENS') {
+        const { type, serviceToken } = event.data;
+        console.log("Recieved: " + type);
+
+        if (type == 'AUTH_TOKENS') {
             console.log("Recieved: " + serviceToken);
             authToken.current = serviceToken;
             window.parent.postMessage({ type: 'REQUEST_TOKENS_RECIEVED' }, '*');
         }
-    }
-
-    const getMenuItems = async () => {
-        const menuItems: JSX.Element[] = [];
-        const modules = await dtmClient.current!.getAllModules();
-        for (const module of modules) {
-            const adminShell = JSON.parse(atob((await dtmClient.current!.getModuleDetails(module.id!)).actualModel!)).assetAdministrationShells[0];
-            menuItems.push(<MenuItem value={module.id} >{adminShell.idShort ?? adminShell.id}</MenuItem>);
-        }
-        return menuItems;
     }
 
     const validateAuthToken = async (token: string): Promise<boolean> => {
@@ -161,6 +153,78 @@ function App() {
             .then((res: Response) => res.json())
             .then(json => json.access_token);
     }
+
+    const handleOpenSelect = async (_event: SyntheticEvent) => {
+        await loading(async () => {
+            await dtmClient.current!.getAllModules()
+                .then(async (modulesResponses: ModuleResponse[]) => {
+                    const newModuleIds = modulesResponses.map(m => m.id);
+                    for (const oldModuleId of Object.entries(modules).map(m => m[0])) {
+                        if (!newModuleIds.includes(oldModuleId))
+                            delete modules[oldModuleId];
+                    }
+
+                    const oldModuleIds = Object.entries(modules).map(m => m[0]);
+                    for (const moduleResponse of modulesResponses) {
+                        if (moduleResponse.id) {
+                            if (!oldModuleIds.includes(moduleResponse.id))
+                                modules[moduleResponse.id] = { name: moduleResponse.name!, description: undefined, value: undefined };
+                        }
+                    }
+                });
+        });
+    };
+
+    const getTechnicalParameters = (json: any) => {
+        let technicalParameters: TechnicalParameters | undefined;
+        for (const submodel of json.submodels) {
+            const jsonTechnicalProperties = submodel.submodelElements.find((s: { idShort: string; }) => s.idShort === 'TechnicalProperties')?.value;
+            if (jsonTechnicalProperties) {
+                let jsonTechnicalParameters = jsonTechnicalProperties.find((s: { idShort: string; }) => s.idShort === 'MODAPTO_TechnicalParameters');
+                if (!jsonTechnicalParameters)
+                    jsonTechnicalParameters = jsonTechnicalProperties.find((s: { idShort: string; }) => s.idShort === 'MODAPTO_Sustainability_TechnicalParameters');
+
+                if (jsonTechnicalParameters) {
+                    const jsonAdminShell = json.assetAdministrationShells[0];
+                    technicalParameters = {
+                        name: jsonAdminShell.idShort ?? jsonAdminShell.id,
+                        description: jsonTechnicalParameters.description[0].text,
+                        value: jsonTechnicalParameters.value.filter((v: { idShort: string; }) => technicalPropertiesWhitelist.includes(v.idShort))
+                            .map((v: { idShort: string, description: { text: string; }[]; value: number; }) => {
+                                return {
+                                    idShort: v.idShort,
+                                    description: v.description[0].text,
+                                    value: v.value
+                                }
+                            })
+                    }
+                    break;
+                }
+            }
+        }
+        return technicalParameters;
+    }
+
+    const handleChangeSelect = async (event: SelectChangeEvent<string>, _child: ReactNode) => {
+        let paReportExists = false;
+        await loading(async () => {
+            await dtmClient.current!.getModuleDetails(event.target.value)
+                .then((moduleDetailsRes: ModuleDetailsResponse) => {
+                    const json = JSON.parse(atob(moduleDetailsRes.actualModel!));
+                    modules[event.target.value] = getTechnicalParameters(json);
+                });
+
+            paReportExists = (await fetch(backendUri.current + '/' + event.target.value, { method: 'HEAD' })).ok;
+            setPAReportExists(paReportExists);
+            setSelectedModuleId(event.target.value);
+        })
+
+        setDisableUpdateModule(false);
+        setDisableUploadPAReport(paReportExists);
+        setDisableSavePAReport(!paReportExists);
+        setDisableSaveModule(false);
+        setDisableRemoveModule(false);
+    };
 
     const handleClickSaveModule = async () => {
         await loading(async () => {
@@ -181,8 +245,8 @@ function App() {
                     await fetch(backendUri.current + '/' + selectedModuleId, { method: 'DELETE' })
                         .catch(() => alert('error', 'PA Report removal unsuccesful'));
                     setSelectedModuleId('');
+                    delete modules[selectedModuleId];
                     setPAReportExists(false);
-                    setChartData(null);
                     alert('success', 'Removal succesful');
                 })
                 .catch(e => {
@@ -200,94 +264,81 @@ function App() {
             .catch(() => { })
     };
 
-    const handleChangeSelect = async (event: SelectChangeEvent<string>, child: ReactNode) => {
-        let paReportExists = false;
-        await loading(async () => {
-            setSelectedModuleId(event.target.value);
+    const encodeFile = async (file: File) => {
+        let format;
+        let data;
 
-            paReportExists = (await fetch(backendUri.current + '/' + event.target.value, { method: 'Head' })).ok;
-            setPAReportExists(paReportExists);
-            //MODAPTO_Sustainability_TechnicalParameters kann verschiedenen positionen sein
-            const submodel = JSON.parse(atob((await dtmClient.current!.getModuleDetails(event.target.value)).actualModel!)).submodels[0];
-            setChartData(submodel.submodelElements.find(s => s.idShort === 'TechnicalProperties')?.value
-                .find(s => s.idShort === 'MODAPTO_Sustainability_TechnicalParameters'));
-        })
-
-        setDisableUpdateModule(false);
-        setDisableUploadPAReport(paReportExists);
-        setDisableSavePAReport(!paReportExists);
-        setDisableSaveModule(false);
-        setDisableRemoveModule(false);
-    };
+        if (file.name.endsWith('json')) {
+            format = ModuleRequestFormat.JSON;
+            data = btoa(await file.text());
+        }
+        else if (file.name.endsWith('aasx')) {
+            format = ModuleRequestFormat.AASX;
+            data = Buffer.from(await file.arrayBuffer()).toString('base64');
+        }
+        else {
+            try {
+                data = await file.text();
+                const dataDecoded = atob(data);
+                try {
+                    JSON.parse(dataDecoded);
+                    format = ModuleRequestFormat.JSON;
+                }
+                catch {
+                    format = ModuleRequestFormat.AASX;
+                }
+            }
+            catch {
+                data = await file.text();
+                try {
+                    JSON.parse(data);
+                    format = ModuleRequestFormat.JSON;
+                    data = btoa(data);
+                }
+                catch {
+                    format = ModuleRequestFormat.AASX;
+                    data = Buffer.from(await file.arrayBuffer()).toString('base64');
+                }
+            }
+        }
+        return { format, data };
+    }
 
     const handleInputUploadModule = async (event: SyntheticEvent<HTMLInputElement>) => {
         const inputElement = (event.target as HTMLInputElement);
-        if (inputElement.files) {
+        if (inputElement.files && inputElement.files.length > 0) {
             await loading(async () => {
-                for (const file of inputElement.files!) {
-                    let format;
-                    let data;
-
-                    if (file.name.endsWith('json')) {
-                        format = ModuleRequestFormat.JSON;
-                        data = btoa(await file.text());
-                    }
-                    else if (file.name.endsWith('aasx')) {
-                        format = ModuleRequestFormat.AASX;
-                        data = Buffer.from(await file.arrayBuffer()).toString('base64');
-                    }
-                    else {
-                        try {
-                            data = await file.text();
-                            const dataDecoded = atob(data);
-                            try {
-                                JSON.parse(dataDecoded);
-                                format = ModuleRequestFormat.JSON;
-                            }
-                            catch {
-                                format = ModuleRequestFormat.AASX;
-                            }
-                        }
-                        catch {
-                            data = await file.text();
-                            try {
-                                JSON.parse(data);
-                                format = ModuleRequestFormat.JSON;
-                                data = btoa(data);
-                            }
-                            catch {
-                                format = ModuleRequestFormat.AASX;
-                                data = Buffer.from(await file.arrayBuffer()).toString('base64');
-                            }
-                        }
-                    }
-                    inputElement.value = '';
-                    await dtmClient.current!.createModule({ aas: data, format: format, type: ModuleRequestType.DOCKER, assetConnections: [] })
+                const { data, format } = await encodeFile(inputElement.files![0]);
+                await dtmClient.current!.createModule(new ModuleRequest({ aas: data, format: format, type: ModuleRequestType.DOCKER }))
                         .then(() => alert('success', 'Upload succesful'))
                         .catch(() => alert('error', 'Upload unsuccesful'));
-                }
+                
             });
         }
+        inputElement.value = '';
     };
 
     const handleInputUpdateModule = async (event: SyntheticEvent<HTMLInputElement>) => {
         const inputElement = (event.target as HTMLInputElement);
         if (inputElement.files && inputElement.files.length > 0) {
             await loading(async () => {
-                if (inputElement.files![0].name.endsWith('json')) {
-                    await dtmClient.current!.updateModule(selectedModuleId, {
-                        aas: btoa(await inputElement.files![0].text()),
-                        format: ModuleRequestFormat.JSON,
+
+                    const { data, format } = await encodeFile(inputElement.files![0]);
+                    await dtmClient.current!.updateModule(selectedModuleId, new ModuleRequest({
+                        aas: data,
+                        format: format,
                         type: ModuleRequestType.DOCKER
-                    })
-                }
-                else if (inputElement.files![0].name.endsWith('aasx')) {
-                    await dtmClient.current!.updateModule(selectedModuleId, {
-                        aas: Buffer.from(await inputElement.files![0].arrayBuffer()).toString('base64'),
-                        format: ModuleRequestFormat.AASX,
-                        type: ModuleRequestType.DOCKER
-                    })
-                }
+                    }))
+                        .then(() => {
+                            delete modules[selectedModuleId];
+                            setSelectedModuleId('');
+                            setPAReportExists(false);
+                            alert('success', 'Update succesful');
+                        })
+                        .catch(e => {
+                            alert('error', 'Update unsuccesful');
+                            throw e;
+                        });
             })
                 .then(() => {
                     setDisableUpdateModule(true);
@@ -295,14 +346,10 @@ function App() {
                     setDisableSaveModule(true);
                     setDisableSavePAReport(true);
                     setDisableRemoveModule(true);
-                    inputElement.value = '';
-                    setSelectedModuleId('');
-                    setPAReportExists(false);
-                    setChartData(null);
-                    alert('success', 'Update succesful');
                 })
-                .catch(() => alert('error', 'Update unsuccesful'));
+                .catch(() => { });
         }
+        inputElement.value = '';
     };
 
     const handleInputUploadPAReport = async (event: SyntheticEvent<HTMLInputElement>) => {
@@ -325,14 +372,15 @@ function App() {
                         alert('error', 'Upload unsuccesful')
                         throw e
                     });
-                inputElement.value = '';
             })
                 .then(() => {
                     setDisableUploadPAReport(true)
                     setDisableSavePAReport(false);
                 })
                 .catch(() => { })
+           
         }
+        inputElement.value = '';
     }
 
     const handleClickSavePAReport = async () => {
@@ -349,6 +397,10 @@ function App() {
                 });
         });
     };
+
+    const wait = async (delay: number) => {
+        await new Promise(res => setTimeout(res, delay));
+    }
 
     const loading = async (callback: () => Promise<void>) => {
         const originalStates = [disableUploadModule, disableUpdateModule, disableSaveModule, disableRemoveModule, disableSelectModule, disableUploadPAReport, disableSavePAReport];
@@ -400,7 +452,7 @@ function App() {
                 <FormControl disabled={disableSelectModule} fullWidth >
                     <InputLabel id='module-label'>Module</InputLabel>
                     <Select onChange={handleChangeSelect} onOpen={handleOpenSelect} value={selectedModuleId} labelId='module-label' label='Module'>
-                        {menuItems}
+                        {Object.entries(modules).filter(e => e[1] && e[1].name).map(e => <MenuItem value={e[0]} >{e[1]!.name}</MenuItem>)}
                     </Select>
                 </FormControl>
             </div>
@@ -416,20 +468,20 @@ function App() {
                     </Box>
                     <TabPanel value='1'>
                         {paReportExists ? (
-                            <iframe src={'/data/pa-' + selectedModuleId + '/index.html'} scrolling='omit' style={{ position: 'absolute', width: '62%', height: '85%' }} />
+                            <iframe src={'/data/pa-' + selectedModuleId + '/index.html'} /*scrolling='omit'*/ style={{ position: 'absolute', width: '62%', height: '85%' }} />
                         ) : (
                             <p>No data loaded.</p>
                         )}
                     </TabPanel>
                     <TabPanel value='2'>
-                        {chartData?.value ? (
+                        {modules[selectedModuleId]?.value ? (
                             <Radar
                                 data={{
-                                    labels: chartData.value.map(v => v.idShort),
+                                    labels: modules[selectedModuleId].value.map(v => v.description),
                                     datasets: [
                                         {
-                                            label: chartData.description[0].text,
-                                            data: chartData.value.map(v => v.value),
+                                            label: modules[selectedModuleId].description,
+                                            data: modules[selectedModuleId].value.map(v => v.value),
                                             backgroundColor: 'rgba(0, 123, 255, 0.2)',
                                             borderColor: 'rgba(0, 123, 255, 1)',
                                             borderWidth: 2,
@@ -442,6 +494,11 @@ function App() {
                                             angleLines: { display: true },
                                             suggestedMin: 0,
                                             suggestedMax: 100,
+                                            pointLabels: {
+                                                font: {
+                                                    size: 14
+                                                }
+                                            }
                                         },
                                     },
                                 }}
