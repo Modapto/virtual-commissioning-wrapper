@@ -2,7 +2,7 @@
 
 Virtual Commissioning consists of an industrial virtual commissioning software toolsuite (in this case RF::SUITE) and the MODAPTO integrated GUI (VC wrapper application) which provides access to MODAPTO system users.
 
-The Virtual Commissioning Wrapper application enables the user to perform the following functions (see UML sequence diagram).
+The Virtual Commissioning Wrapper application enables the user to perform the following functions.
 
 - Upload MODAPTO Module to MODAPTO system from a virtual commissioning user storage
 ![Upload MODAPTO Module](images/VC_UploadModule.png)
