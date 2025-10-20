@@ -124,6 +124,9 @@ function App() {
                             authToken.current = await getAuthToken();
                         });
                 }
+                else {
+                    authToken.current = await getAuthToken();
+                }
             }
         }
 
@@ -310,9 +313,8 @@ function App() {
             await loading(async () => {
                 const { data, format } = await encodeFile(inputElement.files![0]);
                 await dtmClient.current!.createModule(new ModuleRequest({ aas: data, format: format, type: ModuleRequestType.DOCKER }))
-                        .then(() => alert('success', 'Upload succesful'))
-                        .catch(() => alert('error', 'Upload unsuccesful'));
-                
+                    .then(() => alert('success', 'Upload succesful'))
+                    .catch(() => alert('error', 'Upload unsuccesful'));
             });
         }
         inputElement.value = '';
@@ -322,23 +324,22 @@ function App() {
         const inputElement = (event.target as HTMLInputElement);
         if (inputElement.files && inputElement.files.length > 0) {
             await loading(async () => {
-
-                    const { data, format } = await encodeFile(inputElement.files![0]);
-                    await dtmClient.current!.updateModule(selectedModuleId, new ModuleRequest({
-                        aas: data,
-                        format: format,
-                        type: ModuleRequestType.DOCKER
-                    }))
-                        .then(() => {
-                            delete modules[selectedModuleId];
-                            setSelectedModuleId('');
-                            setPAReportExists(false);
-                            alert('success', 'Update succesful');
-                        })
-                        .catch(e => {
-                            alert('error', 'Update unsuccesful');
-                            throw e;
-                        });
+                const { data, format } = await encodeFile(inputElement.files![0]);
+                await dtmClient.current!.updateModule(selectedModuleId, new ModuleRequest({
+                    aas: data,
+                    format: format,
+                    type: ModuleRequestType.DOCKER
+                }))
+                    .then(() => {
+                        delete modules[selectedModuleId];
+                        setSelectedModuleId('');
+                        setPAReportExists(false);
+                        alert('success', 'Update succesful');
+                    })
+                    .catch(e => {
+                        alert('error', 'Update unsuccesful');
+                        throw e;
+                    });
             })
                 .then(() => {
                     setDisableUpdateModule(true);
@@ -378,7 +379,6 @@ function App() {
                     setDisableSavePAReport(false);
                 })
                 .catch(() => { })
-           
         }
         inputElement.value = '';
     }
