@@ -69,38 +69,45 @@ function App() {
     const technicalPropertiesWhitelist = ['EnergyConsumption', 'CarbonEmission', 'Cycle Time', 'Costs', 'EnergyMix'];
 
     useEffect(() => {
-        loading(async () => {
-            window.addEventListener('message', onRecievedAuthToken);
+        if (loadingCounter.current == 0) {
+            loading(async () => {
+                window.addEventListener('message', onRecievedAuthToken);
 
-            if (import.meta.env.PROD) {
-                let occurances = 0;
+                if (!backendUri.current) {
+                    if (import.meta.env.PROD) {
+                        let occurances = 0;
 
-                for (let i = 0; i < window.location.href.length; i++) {
-                    if (window.location.href[i] == '/') {
-                        occurances++;
-                        if (occurances == 3) {
-                            backendUri.current = window.location.href.substring(0, i) + '/api';
-                            break;
+                        for (let i = 0; i < window.location.href.length; i++) {
+                            if (window.location.href[i] == '/') {
+                                occurances++;
+                                if (occurances == 3) {
+                                    backendUri.current = window.location.href.substring(0, i) + '/api';
+                                    break;
+                                }
+                            }
                         }
+                        if (!backendUri.current)
+                            backendUri.current = window.location.href + '/api';
                     }
+                    else
+                        backendUri.current = 'http://localhost:12345/api';
                 }
-                if (!backendUri.current)
-                    backendUri.current = window.location.href + '/api';
-            }
-            else
-                backendUri.current = 'http://localhost:12345/api';
 
-            await fetch(backendUri.current + '/config', { method: 'GET' })
-                .then((res) => res.json())
-                .then((json) => {
-                    dtmClient.current = new DTMClient(json.dtmUri, {
-                        async fetch(url: RequestInfo, init: RequestInit) {
-                            return await authTokenFetchInit(url, init);
-                        }
-                    });
-                    modaptoUri.current = json.modaptoUri;
-                });
-        });
+                if (!dtmClient.current || !modaptoUri.current) {
+                    await fetch(backendUri.current + '/config', { method: 'GET' })
+                        .then((res) => res.json())
+                        .then((json) => {
+                            dtmClient.current = new DTMClient(json.dtmUri, {
+                                async fetch(url: RequestInfo, init: RequestInit) {
+                                    return await authTokenFetchInit(url, init);
+                                }
+                            });
+                            modaptoUri.current = json.modaptoUri;
+                        });
+                }
+            });
+        }
+
         return () => {
             window.removeEventListener("message", onRecievedAuthToken);
         }
@@ -209,24 +216,16 @@ function App() {
     }
 
     const handleChangeSelect = async (event: SelectChangeEvent<string>, _child: ReactNode) => {
-        let paReportExists = false;
         await loading(async () => {
             await dtmClient.current!.getModuleDetails(event.target.value)
                 .then((moduleDetailsRes: ModuleDetailsResponse) => {
                     const json = JSON.parse(atob(moduleDetailsRes.actualModel!));
                     modules[event.target.value] = getTechnicalParameters(json);
                 });
-
-            paReportExists = (await fetch(backendUri.current + '/' + event.target.value, { method: 'HEAD' })).ok;
-            setPAReportExists(paReportExists);
-            setSelectedModuleId(event.target.value);
-        })
-
-        setDisableUpdateModule(false);
-        setDisableUploadPAReport(paReportExists);
-        setDisableSavePAReport(!paReportExists);
-        setDisableSaveModule(false);
-        setDisableRemoveModule(false);
+        }).then(() => {
+            setSelectedModule(event.target.value);
+            setPAReport(event.target.value, undefined);
+        });
     };
 
     const handleClickSaveModule = async () => {
@@ -247,9 +246,7 @@ function App() {
                 .then(async () => {
                     await fetch(backendUri.current + '/' + selectedModuleId, { method: 'DELETE' })
                         .catch(() => alert('error', 'PA Report removal unsuccesful'));
-                    setSelectedModuleId('');
                     delete modules[selectedModuleId];
-                    setPAReportExists(false);
                     alert('success', 'Removal succesful');
                 })
                 .catch(e => {
@@ -258,11 +255,8 @@ function App() {
                 });
         })
             .then(() => {
-                setDisableUpdateModule(true);
-                setDisableUploadPAReport(true);
-                setDisableSaveModule(true);
-                setDisableSavePAReport(true);
-                setDisableRemoveModule(true);
+                setSelectedModule('');
+                setPAReport('', false);
             })
             .catch(() => { })
     };
@@ -332,8 +326,6 @@ function App() {
                 }))
                     .then(() => {
                         delete modules[selectedModuleId];
-                        setSelectedModuleId('');
-                        setPAReportExists(false);
                         alert('success', 'Update succesful');
                     })
                     .catch(e => {
@@ -342,11 +334,8 @@ function App() {
                     });
             })
                 .then(() => {
-                    setDisableUpdateModule(true);
-                    setDisableUploadPAReport(true);
-                    setDisableSaveModule(true);
-                    setDisableSavePAReport(true);
-                    setDisableRemoveModule(true);
+                    setSelectedModule('');
+                    setPAReport('', false);
                 })
                 .catch(() => { });
         }
@@ -366,7 +355,6 @@ function App() {
                     body: formData
                 })
                     .then(() => {
-                        setPAReportExists(true);
                         alert('success', 'Upload succesful')
                     })
                     .catch(e => {
@@ -375,12 +363,38 @@ function App() {
                     });
             })
                 .then(() => {
-                    setDisableUploadPAReport(true)
-                    setDisableSavePAReport(false);
+                    setPAReport(selectedModuleId, true);
                 })
                 .catch(() => { })
         }
         inputElement.value = '';
+    }
+
+    const setSelectedModule = (moduleId: string) => {
+        setSelectedModuleId(moduleId);
+        const noModuleSelected = moduleId === '';
+        setDisableUpdateModule(noModuleSelected);
+        setDisableSaveModule(noModuleSelected);
+        setDisableRemoveModule(noModuleSelected);
+        if (noModuleSelected)
+            setPAReport(moduleId, false);
+        else
+            setPAReport(moduleId, undefined);
+    }
+
+    const setPAReport = async (moduleId: string, paReportExists?: boolean) => {
+        if (moduleId === '') {
+            setDisableUploadPAReport(true);
+            setDisableSavePAReport(true);
+            paReportExists = false;
+        }
+        else {
+            if (paReportExists == undefined)
+                paReportExists = (await fetch(backendUri.current + '/' + moduleId, { method: 'HEAD' })).ok;
+            setDisableUploadPAReport(paReportExists);
+            setDisableSavePAReport(!paReportExists);
+        }
+        setPAReportExists(paReportExists);
     }
 
     const handleClickSavePAReport = async () => {
@@ -402,27 +416,47 @@ function App() {
         await new Promise(res => setTimeout(res, delay));
     }
 
+    let loadingCounter = useRef(0);
+    let preLoadingStates = useRef<boolean[] | null>(null);
+
     const loading = async (callback: () => Promise<void>) => {
-        const originalStates = [disableUploadModule, disableUpdateModule, disableSaveModule, disableRemoveModule, disableSelectModule, disableUploadPAReport, disableSavePAReport];
-        setDisableUploadModule(true);
-        setDisableUpdateModule(true);
-        setDisableSaveModule(true);
-        setDisableRemoveModule(true);
-        setDisableSelectModule(true);
-        setDisableUploadPAReport(true);
-        setDisableSavePAReport(true);
+        loadingCounter.current++;
 
-        document.body.style.cursor = 'progress';
+        if (loadingCounter.current == 1) {
+            preLoadingStates.current = [disableUploadModule, disableUpdateModule, disableSaveModule,
+                disableRemoveModule, disableSelectModule, disableUploadPAReport, disableSavePAReport];
+
+            setDisableUploadModule(true);
+            setDisableUpdateModule(true);
+            setDisableSaveModule(true);
+            setDisableRemoveModule(true);
+            setDisableSelectModule(true);
+            setDisableUploadPAReport(true);
+            setDisableSavePAReport(true);
+
+            document.body.style.cursor = 'progress';
+        }
+
         await callback();
-        document.body.style.cursor = '';
 
-        setDisableUploadModule(originalStates[0]);
-        setDisableUpdateModule(originalStates[1]);
-        setDisableSaveModule(originalStates[2]);
-        setDisableRemoveModule(originalStates[3]);
-        setDisableSelectModule(originalStates[4]);
-        setDisableUploadPAReport(originalStates[5]);
-        setDisableSavePAReport(originalStates[6]);
+        loadingCounter.current--;
+        if (loadingCounter.current == 0) {
+            document.body.style.cursor = '';
+
+            setDisableUploadModule(preLoadingStates.current![0]);
+            setDisableUpdateModule(preLoadingStates.current![1]);
+            setDisableSaveModule(preLoadingStates.current![2]);
+            setDisableRemoveModule(preLoadingStates.current![3]);
+            setDisableSelectModule(preLoadingStates.current![4]);
+            setDisableUploadPAReport(preLoadingStates.current![5]);
+            setDisableSavePAReport(preLoadingStates.current![6]);
+
+            preLoadingStates.current = null;
+        }
+        else {
+            while (loadingCounter.current != 0) {
+            }
+        }
     }
 
     const alert = async (severity: AlertColor, text: string) => {
