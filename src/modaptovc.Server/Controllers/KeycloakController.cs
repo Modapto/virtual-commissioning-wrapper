@@ -6,12 +6,11 @@ namespace modaptovc.Server.Controllers;
 [ApiController]
 public partial class KeycloakController : ControllerBase
 {
-    public KeycloakController(ILogger<KeycloakController> logger)
+    public KeycloakController()
     {
         string? keycloakUri = Environment.GetEnvironmentVariable("KEYCLOAK_URI");
         ArgumentNullException.ThrowIfNull(keycloakUri);
 
-        m_logger = logger;
         m_httpClient = new HttpClient() {
             BaseAddress = new Uri(keycloakUri)
         };
@@ -43,5 +42,4 @@ public partial class KeycloakController : ControllerBase
     }
 
     private readonly HttpClient m_httpClient;
-    private readonly ILogger<KeycloakController> m_logger;
 }

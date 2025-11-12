@@ -69,44 +69,42 @@ function App() {
     const technicalPropertiesWhitelist = ['EnergyConsumption', 'CarbonEmission', 'Cycle Time', 'Costs', 'EnergyMix'];
 
     useEffect(() => {
-        if (loadingCounter.current == 0) {
-            loading(async () => {
-                window.addEventListener('message', onRecievedAuthToken);
+        loading(async () => {
+            window.addEventListener('message', onRecievedAuthToken);
 
-                if (!backendUri.current) {
-                    if (import.meta.env.PROD) {
-                        let occurances = 0;
+            if (!backendUri.current) {
+                if (import.meta.env.PROD) {
+                    let occurances = 0;
 
-                        for (let i = 0; i < window.location.href.length; i++) {
-                            if (window.location.href[i] == '/') {
-                                occurances++;
-                                if (occurances == 3) {
-                                    backendUri.current = window.location.href.substring(0, i) + '/api';
-                                    break;
-                                }
+                    for (let i = 0; i < window.location.href.length; i++) {
+                        if (window.location.href[i] == '/') {
+                            occurances++;
+                            if (occurances == 3) {
+                                backendUri.current = window.location.href.substring(0, i) + '/api';
+                                break;
                             }
                         }
-                        if (!backendUri.current)
-                            backendUri.current = window.location.href + '/api';
                     }
-                    else
-                        backendUri.current = 'http://localhost:12345/api';
+                    if (!backendUri.current)
+                        backendUri.current = window.location.href + '/api';
                 }
+                else
+                    backendUri.current = 'http://localhost:12345/api';
+            }
 
-                if (!dtmClient.current || !modaptoUri.current) {
-                    await fetch(backendUri.current + '/config', { method: 'GET' })
-                        .then((res) => res.json())
-                        .then((json) => {
-                            dtmClient.current = new DTMClient(json.dtmUri, {
-                                async fetch(url: RequestInfo, init: RequestInit) {
-                                    return await authTokenFetchInit(url, init);
-                                }
-                            });
-                            modaptoUri.current = json.modaptoUri;
+            if (!dtmClient.current || !modaptoUri.current) {
+                await fetch(backendUri.current + '/config', { method: 'GET' })
+                    .then((res) => res.json())
+                    .then((json) => {
+                        dtmClient.current = new DTMClient(json.dtmUri, {
+                            async fetch(url: RequestInfo, init: RequestInit) {
+                                return await authTokenFetchInit(url, init);
+                            }
                         });
-                }
-            });
-        }
+                        modaptoUri.current = json.modaptoUri;
+                    });
+            }
+        });
 
         return () => {
             window.removeEventListener("message", onRecievedAuthToken);
@@ -115,7 +113,7 @@ function App() {
 
     const authTokenFetchInit = async (url: RequestInfo, init: RequestInit) => {
         if (!authToken.current || !await validateAuthToken(authToken.current)) {
-            window.parent.postMessage({ type: 'REQUEST_TOKENS' }, '*');
+            window.parent.postMessage({ type: 'REQUEST_TOKENS' }, modaptoUri.current!);
             await wait(1000);
 
             if (!authToken.current) {
@@ -143,12 +141,14 @@ function App() {
 
     const onRecievedAuthToken = (event: MessageEvent) => {
         const { type, serviceToken } = event.data;
-        console.log("Recieved: " + type);
+        if (!import.meta.env.PROD)
+            console.log("Recieved: " + type);
 
         if (type == 'AUTH_TOKENS') {
-            console.log("Recieved: " + serviceToken);
+            if (!import.meta.env.PROD)
+                console.log("Recieved: " + serviceToken);
             authToken.current = serviceToken;
-            window.parent.postMessage({ type: 'REQUEST_TOKENS_RECIEVED' }, '*');
+            window.parent.postMessage({ type: 'REQUEST_TOKENS_RECIEVED' }, modaptoUri.current!);
         }
     }
 
@@ -224,7 +224,7 @@ function App() {
                 });
         }).then(() => {
             setSelectedModule(event.target.value);
-            setPAReport(event.target.value, undefined);
+            setPAReport(event.target.value);
         });
     };
 
@@ -379,7 +379,7 @@ function App() {
         if (noModuleSelected)
             setPAReport(moduleId, false);
         else
-            setPAReport(moduleId, undefined);
+            setPAReport(moduleId);
     }
 
     const setPAReport = async (moduleId: string, paReportExists?: boolean) => {
@@ -416,47 +416,29 @@ function App() {
         await new Promise(res => setTimeout(res, delay));
     }
 
-    let loadingCounter = useRef(0);
-    let preLoadingStates = useRef<boolean[] | null>(null);
-
     const loading = async (callback: () => Promise<void>) => {
-        loadingCounter.current++;
+        const preLoadingStates = [disableUploadModule, disableUpdateModule, disableSaveModule,
+            disableRemoveModule, disableSelectModule, disableUploadPAReport, disableSavePAReport];
 
-        if (loadingCounter.current == 1) {
-            preLoadingStates.current = [disableUploadModule, disableUpdateModule, disableSaveModule,
-                disableRemoveModule, disableSelectModule, disableUploadPAReport, disableSavePAReport];
+        setDisableUploadModule(true);
+        setDisableUpdateModule(true);
+        setDisableSaveModule(true);
+        setDisableRemoveModule(true);
+        setDisableSelectModule(true);
+        setDisableUploadPAReport(true);
+        setDisableSavePAReport(true);
 
-            setDisableUploadModule(true);
-            setDisableUpdateModule(true);
-            setDisableSaveModule(true);
-            setDisableRemoveModule(true);
-            setDisableSelectModule(true);
-            setDisableUploadPAReport(true);
-            setDisableSavePAReport(true);
-
-            document.body.style.cursor = 'progress';
-        }
-
+        document.body.style.cursor = 'progress';
         await callback();
+        document.body.style.cursor = '';
 
-        loadingCounter.current--;
-        if (loadingCounter.current == 0) {
-            document.body.style.cursor = '';
-
-            setDisableUploadModule(preLoadingStates.current![0]);
-            setDisableUpdateModule(preLoadingStates.current![1]);
-            setDisableSaveModule(preLoadingStates.current![2]);
-            setDisableRemoveModule(preLoadingStates.current![3]);
-            setDisableSelectModule(preLoadingStates.current![4]);
-            setDisableUploadPAReport(preLoadingStates.current![5]);
-            setDisableSavePAReport(preLoadingStates.current![6]);
-
-            preLoadingStates.current = null;
-        }
-        else {
-            while (loadingCounter.current != 0) {
-            }
-        }
+        setDisableUploadModule(preLoadingStates[0]);
+        setDisableUpdateModule(preLoadingStates[1]);
+        setDisableSaveModule(preLoadingStates[2]);
+        setDisableRemoveModule(preLoadingStates[3]);
+        setDisableSelectModule(preLoadingStates[4]);
+        setDisableUploadPAReport(preLoadingStates[5]);
+        setDisableSavePAReport(preLoadingStates[6]);
     }
 
     const alert = async (severity: AlertColor, text: string) => {
@@ -486,7 +468,7 @@ function App() {
                 <FormControl disabled={disableSelectModule} fullWidth >
                     <InputLabel id='module-label'>Module</InputLabel>
                     <Select onChange={handleChangeSelect} onOpen={handleOpenSelect} value={selectedModuleId} labelId='module-label' label='Module'>
-                        {Object.entries(modules).filter(e => e[1] && e[1].name).map(e => <MenuItem value={e[0]} >{e[1]!.name}</MenuItem>)}
+                        {Object.entries(modules).filter(e => e[1] && e[1].name).map(e => <MenuItem disabled={disableSelectModule} value={e[0]} >{e[1]!.name}</MenuItem>)}
                     </Select>
                 </FormControl>
             </div>
