@@ -27,3 +27,5 @@ The Virtual Commissioning Wrapper application enables the user to perform the fo
 The virtual-commissioning-wrapper can be installed by means of the provided docker container images:
 - https://github.com/orgs/Modapto/packages/container/package/virtual-commissioning-wrapper-client
 - https://github.com/orgs/Modapto/packages/container/package/virtual-commissioning-wrapper-server
+A corresponding docker-compose file is provided here:
+https://github.com/Modapto/virtual-commissioning-wrapper/tree/main/docker-compose
