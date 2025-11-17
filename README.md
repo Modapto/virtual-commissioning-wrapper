@@ -22,3 +22,8 @@ The Virtual Commissioning Wrapper application enables the user to perform the fo
 ![Display VC results](images/VC_Result.png)
 - Delete MODAPTO Module from MODAPTO system
 ![Delete MODAPTO Module](images/VC_RemoveModule.png)
+
+## Installation instruction
+The virtual-commissioning-wrapper can be installed by means of the provided docker container images:
+- https://github.com/orgs/Modapto/packages/container/package/virtual-commissioning-wrapper-client
+- https://github.com/orgs/Modapto/packages/container/package/virtual-commissioning-wrapper-server
